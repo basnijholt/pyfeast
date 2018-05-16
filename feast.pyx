@@ -1,0 +1,51 @@
+import numpy as np
+cimport numpy as np
+
+cdef extern from "feast_dense.h":
+    void dfeast_syev(char *UPLO,
+                     int *N,
+                     double *A,
+                     int *LDA,
+                     int *feastparam,
+                     double *epsout,
+                     int *loop,
+                     double *Emin,
+                     double *Emax,
+                     int *M0,
+                     double *_lambda,
+                     double *q,
+                     int *mode,
+                     double *res,
+                     int *info)
+
+def eig(UPLO,
+        np.int32_t N,
+        np.ndarray[np.double_t, ndim=1] A,
+        np.int32_t LDA,
+        np.ndarray[np.int32_t, ndim=1] feastparam,
+        np.double_t epsout,
+        np.int32_t loop,
+        np.double_t Emin,
+        np.double_t Emax,
+        np.int32_t M0,
+        np.ndarray[np.double_t, ndim=1] _lambda,
+        np.ndarray[np.double_t, ndim=1] q,
+        np.int32_t mode,
+        np.ndarray[np.double_t, ndim=1] res,
+        np.int32_t info):
+   dfeast_syev(<char*> UPLO,
+               <int*> &N,
+               <double*> np.PyArray_DATA(A),
+               <int*> &LDA,
+               <int*> np.PyArray_DATA(feastparam),
+               <double*> &epsout,
+               <int*> &loop,
+               <double*> &Emin,
+               <double*> &Emax,
+               <int*> &M0,
+               <double*> np.PyArray_DATA(_lambda),
+               <double*> np.PyArray_DATA(q),
+               <int*> &mode,
+               <double*> np.PyArray_DATA(res),
+               <int*> &info)
+   return q, _lambda
