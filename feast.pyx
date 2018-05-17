@@ -43,6 +43,8 @@ def eig(np.ndarray[double, ndim=2] A,
     cdef double epsout
     cdef int N = A.shape[0]
     cdef int M = A.shape[1]
+    cdef int M0 = A.shape[1]  # because M will change on exit
+
     cdef np.ndarray evals = np.zeros(M, dtype=DTYPE)
     cdef np.ndarray evecs = np.zeros(N * M, dtype=DTYPE)
     cdef np.ndarray res = np.zeros(M, dtype=DTYPE)
@@ -61,7 +63,7 @@ def eig(np.ndarray[double, ndim=2] A,
                 <int*> &loop,
                 <double*> &Emin,
                 <double*> &Emax,
-                <int*> &M,
+                <int*> &M0,
                 <double*> evals.data,
                 <double*> evecs.data,
                 <int*> &mode,
