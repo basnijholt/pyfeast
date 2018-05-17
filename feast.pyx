@@ -1,6 +1,8 @@
 import numpy as np
 cimport numpy as np
 
+int_dtype = np.int32
+
 cdef extern from "feast_dense.h":
     extern void dfeast_syev_(
         char *UPLO,
@@ -23,7 +25,7 @@ def eig(UPLO,
         int N,
         np.ndarray[np.double_t, ndim=1] A,
         int LDA,
-        np.ndarray[int, ndim=1] feastparam,
+        np.ndarray[np.int32_t, ndim=1] feastparam,
         double epsout,
         int loop,
         double Emin,
