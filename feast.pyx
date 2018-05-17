@@ -28,19 +28,18 @@ cdef extern from "feast_tools.h":
 
 def eig(UPLO,
         int N,
-        np.ndarray[np.double_t, ndim=1] A,
+        np.ndarray[double, ndim=1] A,
         int LDA,
-        np.ndarray[np.int32_t, ndim=1] feastparam,
-        double epsout,
-        int loop,
+        np.ndarray[int, ndim=1] feastparam,
         double Emin,
         double Emax,
-        int M0,
-        np.ndarray[np.double_t, ndim=1] _lambda,
-        np.ndarray[np.double_t, ndim=1] q,
-        int mode,
-        np.ndarray[np.double_t, ndim=1] res,
-        int info):
+        int M0):
+    DTYPE = float
+    cdef int loop, mode, info
+    cdef double epsout
+    cdef np.ndarray _lambda = np.zeros(M0, dtype=DTYPE)
+    cdef np.ndarray q = np.zeros(N * M0, dtype=DTYPE)
+    cdef np.ndarray res = np.zeros(M0, dtype=DTYPE)
     feastinit_(<int*> feastparam.data)
     dfeast_syev_(UPLO,
                 <int*> &N,
@@ -57,4 +56,4 @@ def eig(UPLO,
                 <int*> &mode,
                 <double*> res.data,
                 <int*> &info)
-    return q, _lambda
+    return {'q': q, '_lambda': _lambda, 'res': res, 'info': info, 'mode': mode, 'loop': loop}
