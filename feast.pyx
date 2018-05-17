@@ -21,6 +21,11 @@ cdef extern from "feast_dense.h":
         double *res,
         int *info)
 
+
+cdef extern from "feast_tools.h":
+    extern void feastinit_(int *feastparam)
+
+
 def eig(UPLO,
         int N,
         np.ndarray[np.double_t, ndim=1] A,
@@ -36,7 +41,8 @@ def eig(UPLO,
         int mode,
         np.ndarray[np.double_t, ndim=1] res,
         int info):
-   dfeast_syev_(UPLO,
+    feastinit_(<int*> feastparam.data)
+    dfeast_syev_(UPLO,
                 <int*> &N,
                 <double*> A.data,
                 <int*> &LDA,
@@ -51,4 +57,4 @@ def eig(UPLO,
                 <int*> &mode,
                 <double*> res.data,
                 <int*> &info)
-   return q, _lambda
+    return q, _lambda
