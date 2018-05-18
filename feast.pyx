@@ -3,29 +3,6 @@ cimport numpy as np
 
 int_dtype = np.int32
 
-cdef extern from "feast_dense.h":
-    extern void dfeast_syev_(
-        char *UPLO,
-        int *N,
-        double *A,
-        int *LDA,
-        int *feastparam,
-        double *epsout,
-        int *loop,
-        double *Emin,
-        double *Emax,
-        int *M0,
-        double *_lambda,
-        double *q,
-        int *mode,
-        double *res,
-        int *info)
-
-
-cdef extern from "feast_tools.h":
-    extern void feastinit_(int *feastparam)
-
-
 def eig(np.ndarray[double, ndim=2] A,
         double Emin,
         double Emax,
