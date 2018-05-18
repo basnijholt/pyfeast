@@ -114,6 +114,8 @@ def get_template_info(which):
     infos = defaultdict(list)
     headers = defaultdict(list)
     header_components = get_header_components()
+    call_signatures = get_call_signatures()
+    base_components = get_base_components()
     ctypes = {'s': 'float', 'c': 'float', 'd': 'double', 'z': 'double'}
     pytypes = {'s': 'np.float32', 'c': 'np.complex64',
                'd': 'np.float64', 'z': 'np.complex128'}
@@ -126,11 +128,13 @@ def get_template_info(which):
             if which == 'headers':
                 c = header_components[ctype][matrix_type]
             else:
-                c = get_call_signatures(ctype)[matrix_type]
+                c = call_signatures[ctype][matrix_type]
                 info['pytype'] = pytypes[T]
-                list_I = get_base_components()[ctype][matrix_type][list_I]
+                list_I = base_components[ctype][matrix_type][list_I]
                 info['list_I_args'] = ', '.join(' '.join(tup) for tup in list_I)
-            info['call_sig'] = call_signature(c, eg, x, list_A, list_B, list_I)
+            info['call_sig'] = ''.join([c[list_A], c[list_B][eg],
+                                        c['common1'], c[list_I],
+                                        c['common2'], c['X'][x]])
             headers[matrix_type].append("extern void {}({})".format(
                 info['funcname'], info['call_sig']))
             infos[matrix_type].append(info)
@@ -139,11 +143,6 @@ def get_template_info(which):
         return headers
     else:
         return dict(infos)
-
-def call_signature(components, eg, x, list_A, list_B, list_I):
-    return ''.join([components[list_A], components[list_B][eg],
-                    components['common1'], components[list_I],
-                    components['common2'], components['X'][x]])
 
 def create_feast_pxd():
 
