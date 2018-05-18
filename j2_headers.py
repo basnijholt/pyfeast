@@ -32,27 +32,74 @@ def base_components(ctype):
     return components
 
 
-def convert_header_subcomponents(sub_components, ctype):
+def convert_header_subcomponents(sub_components, ctype, make_str_func):
     from copy import deepcopy
-    make_str = lambda v: ','.join([f'{ctype} *{name}' for ctype, name, *_ in v]) + ','
     header_components = deepcopy(sub_components)
     for k, v in sub_components.items():
         if isinstance(v, list):
-            header_components[k] = make_str(v)
+            header_components[k] = make_str_func(v)
         elif isinstance(v, dict):
             for _k, _v in v.items():
                 if isinstance(_v, list):
-                    header_components[k][_k] = make_str(_v)
+                    header_components[k][_k] = make_str_func(_v)
     return header_components
 
 
 def get_header_components(ctype):
+    make_str = lambda v: ','.join([f'{ctype} *{name}' for ctype, name, *_ in v]) + ','
     components = base_components(ctype)
-    return {k: convert_header_subcomponents(v, ctype) for k, v in components.items()}
+    return {k: convert_header_subcomponents(v, ctype, make_str) for k, v in components.items()}
 
 
+def get_cython_components(ctype):
+    def make_str(v):
+        s = []
+        for tup in v:
+            if len(tup) == 2:
+                ctype, name = tup
+                s.append(f'<{ctype}*> &{name}')
+            else:
+                ctype, name, size = tup
+                s.append(f'<{ctype}*> {name}.data')
+        return ', '.join(s)
+    components = base_components(ctype)
+    return {k: convert_header_subcomponents(v, ctype, make_str) for k, v in components.items()}
 
-dense = """
+
+def get_problems():
+    from collections import defaultdict
+    # Table as defined on page 20 of the documentation
+    dense = [('zc', 'sy', 'list_A1', 'list_B', 'list_I2'),
+             ('zc', 'he', 'list_A1', 'list_B', 'list_I1'),
+             ('ds', 'sy', 'list_A1', 'list_B', 'list_I1'),
+             ('zc', 'ge', 'list_A2', 'list_B', 'list_I2'),
+             ('ds', 'ge', 'list_A2', 'list_B', 'list_I2')]
+
+    banded = [('zc', 'sb', 'list_A1', 'list_B1', 'list_I2'),
+              ('zc', 'hb', 'list_A1', 'list_B1', 'list_I1'),
+              ('zc', 'gb', 'list_A2', 'list_B2', 'list_I2'),
+              ('ds', 'sb', 'list_A1', 'list_B1', 'list_I1'),
+              ('ds', 'gb', 'list_A3', 'list_B2', 'list_I2')]
+
+    sparse =[('zc', 'scsr', 'list_A1', 'list_B', 'list_I2'),
+             ('zc', 'hcsr', 'list_A1', 'list_B', 'list_I1'),
+             ('zc', 'gcsr', 'list_A2', 'list_B', 'list_I2'),
+             ('ds', 'scsr', 'list_A1', 'list_B', 'list_I1'),
+             ('ds', 'gcsr', 'list_A2', 'list_B', 'list_I2')]
+
+    problems = dict(sparse=sparse, banded=banded, dense=dense)
+
+    # Split the 'zc' and 'ds' into two problems
+    all_problems = defaultdict(list)
+    for k, v in problems.items():
+        for types, *rest in v:
+            for type_ in types:
+                all_problems[k].append((type_,) + tuple(rest))
+
+    return dict(all_problems)
+
+
+dense_headers = """
 cdef extern from "feast_dense.h":
     {% for eg in 'eg' %} {% for x in ['x', ''] %}
     extern void {{ d.zc }}feast_sy{{ eg }}v{{ x }}_({{ d.list_A1 }}{{ d.list_B[eg] }}{{ d.common1 }}{{ d.list_I2 }}{{ d.common2 }}{{ d.X[x] }})
@@ -63,7 +110,7 @@ cdef extern from "feast_dense.h":
     {% endfor %} {% endfor %}
 """
 
-banded = """
+banded_headers = """
 cdef extern from "feast_banded.h":
     {% for eg in 'eg' %} {% for x in ['x', ''] %}
     extern void {{ d.zc }}feast_sb{{ eg }}v{{ x }}_({{ d.list_A1 }}{{ d.list_B1[eg] }}{{ d.common1 }}{{ d.list_I2 }}{{ d.common2 }}{{ d.X[x] }})
@@ -74,7 +121,7 @@ cdef extern from "feast_banded.h":
     {% endfor %} {% endfor %}
 """
 
-sparse = """
+sparse_headers = """
 cdef extern from "feast_sparse.h":
     {% for eg in 'eg' %} {% for x in ['x', ''] %}
     extern void {{ d.zc }}feast_scsr{{ eg }}v{{ x }}_({{ d.list_A1 }}{{ d.list_B[eg] }}{{ d.common1 }}{{ d.list_I2 }}{{ d.common2 }}{{ d.X[x] }})
@@ -95,14 +142,14 @@ cdef extern from "feast_tools.h":
 def create_feast_pxd():
     components = get_header_components('double')
     file = base
-    file += Template(sparse).render(d=components['sparse'])
-    file += Template(banded).render(d=components['banded'])
-    file += Template(dense).render(d=components['dense'])
+    file += Template(sparse_headers).render(d=components['sparse'])
+    file += Template(banded_headers).render(d=components['banded'])
+    file += Template(dense_headers).render(d=components['dense'])
 
-    # components = get_components('float')
-    # file += Template(sparse).render(d=components['sparse'])
-    # file += Template(banded).render(d=components['banded'])
-    # file += Template(dense).render(d=components['dense'])
+    components = get_components('float')
+    file += Template(sparse_headers).render(d=components['sparse'])
+    file += Template(banded_headers).render(d=components['banded'])
+    file += Template(dense_headers).render(d=components['dense'])
 
     file = file.replace(',)', ')').replace('lambda', 'lambda_')
     with open('feast.pxd', 'w') as f:
