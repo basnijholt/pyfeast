@@ -77,3 +77,30 @@ cdef extern from "feast_banded.h":
 
 print(Template(t).render(d=banded_components('double'), zc='z', ds='d').replace(',)', ')'))
 print(Template(t).render(d=banded_components('float'), zc='c', ds='s').replace(',)', ')'))
+
+def dense_components(ctype):
+    components = {
+        'list_A1': f'char *UPLO,int *N,double *A,int *LDA,',
+        'list_A2': f'int *N,double *A,int *LDA,',
+        'list_B': {'g': f'double *B,int *LDB,', 'e': ''},
+        'common1': f'int *feastparam,{ctype} *epsout,int *loop,',
+        'common2': f'int *M0,{ctype} *lambda,{ctype} *q,int *mode,{ctype} *res,int *info,',
+        'list_I1': f'{ctype} *Emin,{ctype} *Emax,',
+        'list_I2': f'{ctype} *Emid,{ctype} *r,',
+        'X': {'x': f'{ctype} *Zne,{ctype} *Wne,', '': ''}
+    }
+    return components
+
+t = """
+cdef extern from "feast_dense.h":
+    {% for eg in 'eg' %} {% for x in ['x', ''] %}
+    {{ zc }}feast_sy{{ eg }}v{{ x }}_({{ d.list_A1 }}{{ d.list_B[eg] }}{{ d.common1 }}{{ d.list_I2 }}{{ d.common2 }}{{ d.X[x] }})
+    {{ zc }}feast_he{{ eg }}v{{ x }}_({{ d.list_A1 }}{{ d.list_B[eg] }}{{ d.common1 }}{{ d.list_I1 }}{{ d.common2 }}{{ d.X[x] }})
+    {{ ds }}feast_sy{{ eg }}v{{ x }}_({{ d.list_A1 }}{{ d.list_B[eg] }}{{ d.common1 }}{{ d.list_I1 }}{{ d.common2 }}{{ d.X[x] }})
+    {{ zc }}feast_ge{{ eg }}v{{ x }}_({{ d.list_A2 }}{{ d.list_B[eg] }}{{ d.common1 }}{{ d.list_I2 }}{{ d.common2 }}{{ d.X[x] }})
+    {{ ds }}feast_ge{{ eg }}v{{ x }}_({{ d.list_A2 }}{{ d.list_B[eg] }}{{ d.common1 }}{{ d.list_I2 }}{{ d.common2 }}{{ d.X[x] }})
+    {% endfor %} {% endfor %}
+"""
+
+print(Template(t).render(d=dense_components('double'), zc='z', ds='d').replace(',)', ')'))
+print(Template(t).render(d=dense_components('float'), zc='c', ds='s').replace(',)', ')'))
