@@ -1,35 +1,56 @@
 from jinja2 import Template
 
-def get_components(ctype):
+def base_components(ctype):
     common = {
-        'common1': f'int *feastparam,{ctype} *epsout,int *loop,',
-        'common2': f'int *M0,{ctype} *lambda,{ctype} *q,int *mode,{ctype} *res,int *info,',
-        'list_I1': f'{ctype} *Emin,{ctype} *Emax,',
-        'list_I2': f'{ctype} *Emid,{ctype} *r,',
-        'X': {'x': f'{ctype} *Zne,{ctype} *Wne,', '': ''},
+        'common1': [('int', 'feastparam', 'data'), (ctype, 'epsout'), ('int', 'loop')],
+        'common2': [('int', 'M0'), (ctype, 'lambda', 'data'), (ctype, 'q', 'data'), ('int', 'mode'), (ctype, 'res', 'data'), ('int', 'info')],
+        'list_I1': [(ctype, 'Emin'), (ctype, 'Emax')],
+        'list_I2': [(ctype, 'Emid'), (ctype, 'r')],
+        'X': {'x': [(ctype, 'Zne'), (ctype, 'Wne')], '': ''},
         'zc': {'double': 'z', 'float': 'c'}[ctype],
         'ds': {'double': 'd', 'float': 's'}[ctype]
     }
     sparse = {
-        'list_A1': f'char *UPLO,int *N,{ctype} *sa,int *isa,int *jsa,',
-        'list_A2': f'int *N,{ctype} *sa,int *isa,int *jsa,',
-        'list_B': {'g': f'{ctype} *sb,int *isb,int *jsb,', 'e': ''}
+        'list_A1': [('char', 'UPLO'), ('int', 'N'), (ctype, 'sa'), ('int', 'isa'), ('int', 'jsa')],
+        'list_A2': [('int', 'N'), (ctype, 'sa'), ('int', 'isa'), ('int', 'jsa')],
+        'list_B': {'g': [(ctype, 'sb'), ('int', 'isb'), ('int', 'jsb')], 'e': ''},
         }
     banded = {
-        'list_A1': f'char *UPLO,int *N,int *kla,{ctype} *A,int *LDA,',
-        'list_A2': f'int *N,int *kla,int *kua,{ctype} *A,int *LDA,',
-        'list_A3': f'int *N,int *kla,int *kua,{ctype} *A,int *LDA,',
-        'list_B1': {'g': f'int *klb,{ctype} *B,int *LDB,', 'e': ''},
-        'list_B2': {'g': f'int *klb,int *kub,{ctype} *B,int *LDB,', 'e': ''}
+        'list_A1': [('char', 'UPLO'), ('int', 'N'), ('int', 'kla'), (ctype, 'A'), ('int', 'LDA')],
+        'list_A2': [('int', 'N'), ('int', 'kla'), ('int', 'kua'), (ctype, 'A'), ('int', 'LDA')],
+        'list_A3': [('int', 'N'), ('int', 'kla'), ('int', 'kua'), (ctype, 'A'), ('int', 'LDA')],
+        'list_B1': {'g': [('int', 'klb'), (ctype, 'B'), ('int', 'LDB')], 'e': ''},
+        'list_B2': {'g': [('int', 'klb'), ('int', 'kub'), (ctype, 'B'), ('int', 'LDB')], 'e': ''},
     }
     dense = {
-        'list_A1': f'char *UPLO,int *N,{ctype} *A,int *LDA,',
-        'list_A2': f'int *N,{ctype} *A,int *LDA,',
-        'list_B': {'g': f'{ctype} *B,int *LDB,', 'e': ''}
+        'list_A1': [('char', 'UPLO'), ('int', 'N'), (ctype, 'A'), ('int', 'LDA')],
+        'list_A2': [('int', 'N'), (ctype, 'A'), ('int', 'LDA')],
+        'list_B': {'g': [(ctype, 'B'), ('int', 'LDB')], 'e': ''},
     }
     components = dict(sparse=sparse, banded=banded, dense=dense)
     components = {k: {**v, **common} for k, v in components.items()}
     return components
+
+
+def convert_header_subcomponents(sub_components, ctype):
+    from copy import deepcopy
+    make_str = lambda v: ','.join([f'{ctype} *{name}' for ctype, name, *_ in v]) + ','
+    header_components = deepcopy(sub_components)
+    for k, v in sub_components.items():
+        if isinstance(v, list):
+            header_components[k] = make_str(v)
+        elif isinstance(v, dict):
+            for _k, _v in v.items():
+                if isinstance(_v, list):
+                    header_components[k][_k] = make_str(_v)
+    return header_components
+
+
+def get_header_components(ctype):
+    components = base_components(ctype)
+    return {k: convert_header_subcomponents(v, ctype) for k, v in components.items()}
+
+
 
 dense = """
 cdef extern from "feast_dense.h":
@@ -72,7 +93,7 @@ cdef extern from "feast_tools.h":
 
 
 def create_feast_pxd():
-    components = get_components('double')
+    components = get_header_components('double')
     file = base
     file += Template(sparse).render(d=components['sparse'])
     file += Template(banded).render(d=components['banded'])
