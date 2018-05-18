@@ -1,9 +1,11 @@
+from collections import defaultdict
 from jinja2 import Template
 
-def base_components(ctype):
+def get_base_components(ctype):
     common = {
         'common1': [('int', 'feastparam', 'data'), (ctype, 'epsout'), ('int', 'loop')],
-        'common2': [('int', 'M0'), (ctype, 'lambda', 'data'), (ctype, 'q', 'data'), ('int', 'mode'), (ctype, 'res', 'data'), ('int', 'info')],
+        'common2': [('int', 'M0'), (ctype, 'lambda', 'data'), (ctype, 'q', 'data'),
+                    ('int', 'mode'), (ctype, 'res', 'data'), ('int', 'info')],
         'list_I1': [(ctype, 'Emin'), (ctype, 'Emax')],
         'list_I2': [(ctype, 'Emid'), (ctype, 'r')],
         'X': {'x': [(ctype, 'Zne'), (ctype, 'Wne')], '': ''},
@@ -32,7 +34,7 @@ def base_components(ctype):
     return components
 
 
-def convert_header_subcomponents(sub_components, ctype, make_str_func):
+def convert_base_components(sub_components, ctype, make_str_func):
     from copy import deepcopy
     header_components = deepcopy(sub_components)
     for k, v in sub_components.items():
@@ -45,13 +47,18 @@ def convert_header_subcomponents(sub_components, ctype, make_str_func):
     return header_components
 
 
-def get_header_components(ctype):
-    make_str = lambda v: ','.join([f'{ctype} *{name}' for ctype, name, *_ in v]) + ','
-    components = base_components(ctype)
-    return {k: convert_header_subcomponents(v, ctype, make_str) for k, v in components.items()}
+def get_header_components():
+    components = {}
+    for ctype in ['float', 'double']:
+        make_str = lambda v: ','.join([f'{ctype} *{name}' for ctype, name, *_ in v]) + ','
+        base_components = get_base_components(ctype)
+        components[ctype] = {k: convert_base_components(v, ctype, make_str)
+                             for k, v in base_components.items()}
+    return components
 
 
-def get_cython_components(ctype):
+
+def get_call_signatures(ctype):
     def make_str(v):
         s = []
         for tup in v:
@@ -62,12 +69,12 @@ def get_cython_components(ctype):
                 ctype, name, size = tup
                 s.append(f'<{ctype}*> {name}.data')
         return ', '.join(s)
-    components = base_components(ctype)
-    return {k: convert_header_subcomponents(v, ctype, make_str) for k, v in components.items()}
+    components = get_base_components(ctype)
+    return {k: convert_base_components(v, ctype, make_str) for k, v in components.items()}
 
 
 def get_problems():
-    from collections import defaultdict
+    from itertools import product
     # Table as defined on page 20 of the documentation
     dense = [('zc', 'sy', 'list_A1', 'list_B', 'list_I2'),
              ('zc', 'he', 'list_A1', 'list_B', 'list_I1'),
@@ -93,64 +100,65 @@ def get_problems():
     all_problems = defaultdict(list)
     for k, v in problems.items():
         for types, *rest in v:
-            for type_ in types:
-                all_problems[k].append((type_,) + tuple(rest))
+            for type_, eg, x in product(types, 'eg', ['x', '']):
+                all_problems[k].append((type_, eg, x) + tuple(rest))
 
     return dict(all_problems)
 
 
-dense_headers = """
-cdef extern from "feast_dense.h":
-    {% for eg in 'eg' %} {% for x in ['x', ''] %}
-    extern void {{ d.zc }}feast_sy{{ eg }}v{{ x }}_({{ d.list_A1 }}{{ d.list_B[eg] }}{{ d.common1 }}{{ d.list_I2 }}{{ d.common2 }}{{ d.X[x] }})
-    extern void {{ d.zc }}feast_he{{ eg }}v{{ x }}_({{ d.list_A1 }}{{ d.list_B[eg] }}{{ d.common1 }}{{ d.list_I1 }}{{ d.common2 }}{{ d.X[x] }})
-    extern void {{ d.ds }}feast_sy{{ eg }}v{{ x }}_({{ d.list_A1 }}{{ d.list_B[eg] }}{{ d.common1 }}{{ d.list_I1 }}{{ d.common2 }}{{ d.X[x] }})
-    extern void {{ d.zc }}feast_ge{{ eg }}v{{ x }}_({{ d.list_A2 }}{{ d.list_B[eg] }}{{ d.common1 }}{{ d.list_I2 }}{{ d.common2 }}{{ d.X[x] }})
-    extern void {{ d.ds }}feast_ge{{ eg }}v{{ x }}_({{ d.list_A2 }}{{ d.list_B[eg] }}{{ d.common1 }}{{ d.list_I2 }}{{ d.common2 }}{{ d.X[x] }})
-    {% endfor %} {% endfor %}
-"""
-
-banded_headers = """
-cdef extern from "feast_banded.h":
-    {% for eg in 'eg' %} {% for x in ['x', ''] %}
-    extern void {{ d.zc }}feast_sb{{ eg }}v{{ x }}_({{ d.list_A1 }}{{ d.list_B1[eg] }}{{ d.common1 }}{{ d.list_I2 }}{{ d.common2 }}{{ d.X[x] }})
-    extern void {{ d.zc }}feast_hb{{ eg }}v{{ x }}_({{ d.list_A1 }}{{ d.list_B1[eg] }}{{ d.common1 }}{{ d.list_I1 }}{{ d.common2 }}{{ d.X[x] }})
-    extern void {{ d.zc }}feast_gb{{ eg }}v{{ x }}_({{ d.list_A2 }}{{ d.list_B2[eg] }}{{ d.common1 }}{{ d.list_I2 }}{{ d.common2 }}{{ d.X[x] }})
-    extern void {{ d.ds }}feast_sb{{ eg }}v{{ x }}_({{ d.list_A1 }}{{ d.list_B1[eg] }}{{ d.common1 }}{{ d.list_I1 }}{{ d.common2 }}{{ d.X[x] }})
-    extern void {{ d.ds }}feast_gb{{ eg }}v{{ x }}_({{ d.list_A3 }}{{ d.list_B2[eg] }}{{ d.common1 }}{{ d.list_I2 }}{{ d.common2 }}{{ d.X[x] }})
-    {% endfor %} {% endfor %}
-"""
-
-sparse_headers = """
-cdef extern from "feast_sparse.h":
-    {% for eg in 'eg' %} {% for x in ['x', ''] %}
-    extern void {{ d.zc }}feast_scsr{{ eg }}v{{ x }}_({{ d.list_A1 }}{{ d.list_B[eg] }}{{ d.common1 }}{{ d.list_I2 }}{{ d.common2 }}{{ d.X[x] }})
-    extern void {{ d.zc }}feast_hcsr{{ eg }}v{{ x }}_({{ d.list_A1 }}{{ d.list_B[eg] }}{{ d.common1 }}{{ d.list_I1 }}{{ d.common2 }}{{ d.X[x] }})
-    extern void {{ d.zc }}feast_gcsr{{ eg }}v{{ x }}_({{ d.list_A2 }}{{ d.list_B[eg] }}{{ d.common1 }}{{ d.list_I2 }}{{ d.common2 }}{{ d.X[x] }})
-    extern void {{ d.ds }}feast_scsr{{ eg }}v{{ x }}_({{ d.list_A1 }}{{ d.list_B[eg] }}{{ d.common1 }}{{ d.list_I1 }}{{ d.common2 }}{{ d.X[x] }})
-    extern void {{ d.ds }}feast_gcsr{{ eg }}v{{ x }}_({{ d.list_A2 }}{{ d.list_B[eg] }}{{ d.common1 }}{{ d.list_I2 }}{{ d.common2 }}{{ d.X[x] }})
-    {% endfor %} {% endfor %}
-"""
+def get_cython_components():
+    all_problems = get_problems()
+    cdefs = defaultdict(list)
+    for matrix_type, problems in all_problems.items():
+        for T, eg, x, YF, list_A, list_B, list_I in problems:
+            ctype = {'s': 'float', 'c': 'float',
+                     'd': 'double', 'z': 'double'}[T]
+            components = get_base_components(ctype)[matrix_type]
+            c = get_call_signatures(ctype)[matrix_type]
+            funcname = f'{T}feast_{YF}{eg}v{x}_'
+            pytype = {'s': 'np.float32', 'c': 'np.complex64',
+                      'd': 'np.float64', 'z': 'np.complex128'}[T]
+            list_I_args = ', '.join(' '.join(tup) for tup in components[list_I])
+            func_args = [c[list_A], c[list_B][eg], c['common1'],
+                         c[list_I], c['common2'], c['X'][x]]
+            call_sig = ''.join(func_args)
+            cdefs[matrix_type].append(
+                dict(ctype=ctype, funcname=funcname, pytype=pytype,
+                     list_I_args=list_I_args, call_sig=call_sig))
+    return dict(cdefs)
 
 
-base = """
-cdef extern from "feast_tools.h":
-    extern void feastinit_(int *feastparam)
-"""
+def get_headers():
+    all_problems = get_problems()
+    header_components = get_header_components()
+    cdefs = defaultdict(list)
+    ctypes = {'s': 'float', 'c': 'float', 'd': 'double', 'z': 'double'}
+    for matrix_type, problems in all_problems.items():
+        for T, eg, x, YF, list_A, list_B, list_I in problems:
+            ctype = ctypes[T]
+            c = header_components[ctype][matrix_type]
+            funcname = f'{T}feast_{YF}{eg}v{x}_'
+            func_args = [c[list_A], c[list_B][eg], c['common1'],
+                         c[list_I], c['common2'], c['X'][x]]
+            call_sig = ''.join(func_args)
+            cdefs[matrix_type].append(f'extern void {funcname}({call_sig})')
+    return dict(cdefs)
 
 
 def create_feast_pxd():
-    components = get_header_components('double')
-    file = base
-    file += Template(sparse_headers).render(d=components['sparse'])
-    file += Template(banded_headers).render(d=components['banded'])
-    file += Template(dense_headers).render(d=components['dense'])
 
-    components = get_components('float')
-    file += Template(sparse_headers).render(d=components['sparse'])
-    file += Template(banded_headers).render(d=components['banded'])
-    file += Template(dense_headers).render(d=components['dense'])
+    template = """
+cdef extern from "feast_{}.h":
+    {}
+    """
+    headers = {k: '\n    '.join(v) for k, v in get_headers().items()}
+    headers = {k: template.format(k, v) for k, v in headers.items()}
 
+    base = """
+cdef extern from "feast_tools.h":
+    extern void feastinit_(int *feastparam)
+    """
+    file = base + '\n\n'.join(headers.values())
     file = file.replace(',)', ')').replace('lambda', 'lambda_')
     with open('feast.pxd', 'w') as f:
         f.write(file)
