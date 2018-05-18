@@ -68,6 +68,3 @@ cdef extern from "feast_sparse.h":
 print(Template(sparse).render(d=get_components('double')['sparse']).replace(',)', ')'))
 print(Template(banded).render(d=get_components('double')['banded']).replace(',)', ')'))
 print(Template(dense).render(d=get_components('double')['dense']).replace(',)', ')'))
-print(Template(sparse).render(d=get_components('float')['sparse']).replace(',)', ')'))
-print(Template(banded).render(d=get_components('float')['banded']).replace(',)', ')'))
-print(Template(dense).render(d=get_components('float')['dense']).replace(',)', ')'))
