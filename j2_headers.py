@@ -1,6 +1,7 @@
 from collections import defaultdict
 from jinja2 import Template
 
+
 def _get_base_components(ctype):
     common = {
         'common1': [('int', 'feastparam', 'data'), (ctype, 'epsout'), ('int', 'loop')],
@@ -33,6 +34,7 @@ def _get_base_components(ctype):
     components = {k: {**v, **common} for k, v in components.items()}
     return components
 
+
 def get_base_components():
     return {k: _get_base_components(k) for k in ['float', 'double']}
 
@@ -61,7 +63,7 @@ def get_header_components():
 
 
 
-def get_call_signatures(ctype):
+def _get_call_signatures(ctype):
     def make_str(v):
         s = []
         for tup in v:
@@ -73,7 +75,12 @@ def get_call_signatures(ctype):
                 s.append(f'<{ctype}*> {name}.data')
         return ', '.join(s)
     components = get_base_components()
-    return {k: convert_base_components(v, make_str) for k, v in components[ctype].items()}
+    return {k: convert_base_components(v, make_str)
+            for k, v in components[ctype].items()}
+
+
+def get_call_signatures():
+    return {k: _get_call_signatures(k) for k in ['float', 'double']}
 
 
 def get_problems():
@@ -130,8 +137,8 @@ def get_template_info(which):
             else:
                 c = call_signatures[ctype][matrix_type]
                 info['pytype'] = pytypes[T]
-                list_I = base_components[ctype][matrix_type][list_I]
-                info['list_I_args'] = ', '.join(' '.join(tup) for tup in list_I)
+                (t, x1), (t, x2) = base_components[ctype][matrix_type][list_I]
+                info['list_I_args'] = f'{t} {x1}, {t} {x2}'
             info['call_sig'] = ''.join([c[list_A], c[list_B][eg],
                                         c['common1'], c[list_I],
                                         c['common2'], c['X'][x]])
@@ -144,23 +151,25 @@ def get_template_info(which):
     else:
         return dict(infos)
 
-def create_feast_pxd():
 
+def create_feast_pxd():
     template = """
 cdef extern from "feast_{}.h":
     {}
     """
-    headers = {k: '\n    '.join(v) for k, v in get_headers().items()}
+    header_info = get_template_info('headers')
+    headers = {k: '\n    '.join(v) for k, v in header_info.items()}
     headers = {k: template.format(k, v) for k, v in headers.items()}
 
     base = """
 cdef extern from "feast_tools.h":
     extern void feastinit_(int *feastparam)
     """
-    file = base + '\n\n'.join(headers.values())
+    file = base + '\n\n'.join(headers.values()) + '\n'
     file = file.replace(',)', ')').replace('lambda', 'lambda_')
     with open('feast.pxd', 'w') as f:
         f.write(file)
+
 
 if __name__ == '__main__':
     create_feast_pxd()
