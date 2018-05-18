@@ -1,5 +1,4 @@
-cdef extern from "feast_tools.h":
-    extern void feastinit_(int *feastparam)
+from jinja2 import Template
 
 def get_components(ctype):
     common = {
@@ -65,6 +64,28 @@ cdef extern from "feast_sparse.h":
     {% endfor %} {% endfor %}
 """
 
-print(Template(sparse).render(d=get_components('double')['sparse']).replace(',)', ')'))
-print(Template(banded).render(d=get_components('double')['banded']).replace(',)', ')'))
-print(Template(dense).render(d=get_components('double')['dense']).replace(',)', ')'))
+
+base = """
+cdef extern from "feast_tools.h":
+    extern void feastinit_(int *feastparam)
+"""
+
+
+def create_feast_pxd():
+    components = get_components('double')
+    file = base
+    file += Template(sparse).render(d=components['sparse'])
+    file += Template(banded).render(d=components['banded'])
+    file += Template(dense).render(d=components['dense'])
+
+    # components = get_components('float')
+    # file += Template(sparse).render(d=components['sparse'])
+    # file += Template(banded).render(d=components['banded'])
+    # file += Template(dense).render(d=components['dense'])
+
+    file = file.replace(',)', ')').replace('lambda', 'lambda_')
+    with open('feast.pxd', 'w') as f:
+        f.write(file)
+
+if __name__ == '__main__':
+    create_feast_pxd()

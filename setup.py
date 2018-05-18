@@ -8,13 +8,16 @@ from distutils.core import setup
 from distutils.extension import Extension
 from Cython.Build import cythonize
 
+import jinja2 as j2
+
+from j2_headers import create_feast_pxd
 
 def guess_libraries():
     """Return the configuration for FEAST if it is available in a known way.
 
     This is known to work with the FEAST binaries in the conda-forge channel."""
     import ctypes.util
-    common_libs = ["feast_dense", "feast", "gfortran"]
+    common_libs = ["feast_dense", "feast_sparse", "feast_banded", "feast", 'mkl_rt', "gfortran", 'iomp5']
     for lib in ['blas', 'openblas']:
         if ctypes.util.find_library(lib):
             return common_libs + [lib]
@@ -69,6 +72,7 @@ def get_config(config_file='build.conf'):
 
 if __name__ == '__main__':
     ext_params = get_config()
+    create_feast_pxd()
 
     ext_modules=[
         Extension("feast",
