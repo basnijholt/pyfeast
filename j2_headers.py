@@ -109,44 +109,41 @@ def get_problems():
     return dict(all_problems)
 
 
-def get_cython_components():
+def get_template_info(which):
     all_problems = get_problems()
-    cdefs = defaultdict(list)
-    components = get_base_components()
-    for matrix_type, problems in all_problems.items():
-        for T, eg, x, YF, list_A, list_B, list_I in problems:
-            ctype = {'s': 'float', 'c': 'float',
-                     'd': 'double', 'z': 'double'}[T]
-            c = get_call_signatures(ctype)[matrix_type]
-            funcname = f'{T}feast_{YF}{eg}v{x}_'
-            pytype = {'s': 'np.float32', 'c': 'np.complex64',
-                      'd': 'np.float64', 'z': 'np.complex128'}[T]
-            list_I_args = ', '.join(' '.join(tup) for tup in components[ctype][matrix_type][list_I])
-            func_args = [c[list_A], c[list_B][eg], c['common1'],
-                         c[list_I], c['common2'], c['X'][x]]
-            call_sig = ''.join(func_args)
-            cdefs[matrix_type].append(
-                dict(ctype=ctype, funcname=funcname, pytype=pytype,
-                     list_I_args=list_I_args, call_sig=call_sig))
-    return dict(cdefs)
-
-
-def get_headers():
-    all_problems = get_problems()
+    infos = defaultdict(list)
+    headers = defaultdict(list)
     header_components = get_header_components()
-    cdefs = defaultdict(list)
     ctypes = {'s': 'float', 'c': 'float', 'd': 'double', 'z': 'double'}
+    pytypes = {'s': 'np.float32', 'c': 'np.complex64',
+               'd': 'np.float64', 'z': 'np.complex128'}
     for matrix_type, problems in all_problems.items():
         for T, eg, x, YF, list_A, list_B, list_I in problems:
+            info = {}
             ctype = ctypes[T]
-            c = header_components[ctype][matrix_type]
-            funcname = f'{T}feast_{YF}{eg}v{x}_'
-            func_args = [c[list_A], c[list_B][eg], c['common1'],
-                         c[list_I], c['common2'], c['X'][x]]
-            call_sig = ''.join(func_args)
-            cdefs[matrix_type].append(f'extern void {funcname}({call_sig})')
-    return dict(cdefs)
+            info['ctype'] = ctype            
+            info['funcname'] = f'{T}feast_{YF}{eg}v{x}_'
+            if which == 'headers':
+                c = header_components[ctype][matrix_type]
+            else:
+                c = get_call_signatures(ctype)[matrix_type]
+                info['pytype'] = pytypes[T]
+                list_I = get_base_components()[ctype][matrix_type][list_I]
+                info['list_I_args'] = ', '.join(' '.join(tup) for tup in list_I)
+            info['call_sig'] = call_signature(c, eg, x, list_A, list_B, list_I)
+            headers[matrix_type].append("extern void {}({})".format(
+                info['funcname'], info['call_sig']))
+            infos[matrix_type].append(info)
 
+    if which == 'headers':
+        return headers
+    else:
+        return dict(infos)
+
+def call_signature(components, eg, x, list_A, list_B, list_I):
+    return ''.join([components[list_A], components[list_B][eg],
+                    components['common1'], components[list_I],
+                    components['common2'], components['X'][x]])
 
 def create_feast_pxd():
 
