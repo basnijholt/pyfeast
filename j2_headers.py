@@ -1,7 +1,7 @@
 from collections import defaultdict
 from jinja2 import Template
 
-def get_base_components(ctype):
+def _get_base_components(ctype):
     common = {
         'common1': [('int', 'feastparam', 'data'), (ctype, 'epsout'), ('int', 'loop')],
         'common2': [('int', 'M0'), (ctype, 'lambda', 'data'), (ctype, 'q', 'data'),
@@ -33,8 +33,11 @@ def get_base_components(ctype):
     components = {k: {**v, **common} for k, v in components.items()}
     return components
 
+def get_base_components():
+    return {k: _get_base_components(k) for k in ['float', 'double']}
 
-def convert_base_components(sub_components, ctype, make_str_func):
+
+def convert_base_components(sub_components, make_str_func):
     from copy import deepcopy
     header_components = deepcopy(sub_components)
     for k, v in sub_components.items():
@@ -49,11 +52,11 @@ def convert_base_components(sub_components, ctype, make_str_func):
 
 def get_header_components():
     components = {}
+    base_components = get_base_components()
     for ctype in ['float', 'double']:
         make_str = lambda v: ','.join([f'{ctype} *{name}' for ctype, name, *_ in v]) + ','
-        base_components = get_base_components(ctype)
-        components[ctype] = {k: convert_base_components(v, ctype, make_str)
-                             for k, v in base_components.items()}
+        components[ctype] = {k: convert_base_components(v, make_str)
+                             for k, v in base_components[ctype].items()}
     return components
 
 
@@ -69,8 +72,8 @@ def get_call_signatures(ctype):
                 ctype, name, size = tup
                 s.append(f'<{ctype}*> {name}.data')
         return ', '.join(s)
-    components = get_base_components(ctype)
-    return {k: convert_base_components(v, ctype, make_str) for k, v in components.items()}
+    components = get_base_components()
+    return {k: convert_base_components(v, make_str) for k, v in components[ctype].items()}
 
 
 def get_problems():
@@ -109,16 +112,16 @@ def get_problems():
 def get_cython_components():
     all_problems = get_problems()
     cdefs = defaultdict(list)
+    components = get_base_components()
     for matrix_type, problems in all_problems.items():
         for T, eg, x, YF, list_A, list_B, list_I in problems:
             ctype = {'s': 'float', 'c': 'float',
                      'd': 'double', 'z': 'double'}[T]
-            components = get_base_components(ctype)[matrix_type]
             c = get_call_signatures(ctype)[matrix_type]
             funcname = f'{T}feast_{YF}{eg}v{x}_'
             pytype = {'s': 'np.float32', 'c': 'np.complex64',
                       'd': 'np.float64', 'z': 'np.complex128'}[T]
-            list_I_args = ', '.join(' '.join(tup) for tup in components[list_I])
+            list_I_args = ', '.join(' '.join(tup) for tup in components[ctype][matrix_type][list_I])
             func_args = [c[list_A], c[list_B][eg], c['common1'],
                          c[list_I], c['common2'], c['X'][x]]
             call_sig = ''.join(func_args)
