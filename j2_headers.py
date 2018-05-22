@@ -7,7 +7,7 @@ CTYPES = {'s': 'float', 'c': 'float', 'd': 'double', 'z': 'double'}
 def _get_base_components(ctype):
     common = {
         'common1': [('int', 'feastparam', 'data'), (ctype, 'epsout'), ('int', 'loop')],
-        'common2': [('int', 'M0'), (ctype, 'lambda', 'data'), (ctype, 'q', 'data'),
+        'common2': [('int', 'M0'), (ctype, 'lambda_', 'data'), (ctype, 'q', 'data'),
                     ('int', 'mode'), (ctype, 'res', 'data'), ('int', 'info')],
         'list_I1': [(ctype, 'Emin'), (ctype, 'Emax')],
         'list_I2': [(ctype, 'Emid'), (ctype, 'r')],
@@ -21,15 +21,15 @@ def _get_base_components(ctype):
         'list_B': {'g': [(ctype, 'sb'), ('int', 'isb'), ('int', 'jsb')], 'e': ''},
         }
     banded = {
-        'list_A1': [('char', 'UPLO'), ('int', 'N'), ('int', 'kla'), (ctype, 'A'), ('int', 'LDA')],
-        'list_A2': [('int', 'N'), ('int', 'kla'), ('int', 'kua'), (ctype, 'A'), ('int', 'LDA')],
-        'list_A3': [('int', 'N'), ('int', 'kla'), ('int', 'kua'), (ctype, 'A'), ('int', 'LDA')],
+        'list_A1': [('char', 'UPLO'), ('int', 'N'), ('int', 'kla'), (ctype, 'A', 'data'), ('int', 'LDA')],
+        'list_A2': [('int', 'N'), ('int', 'kla'), ('int', 'kua'), (ctype, 'A', 'data'), ('int', 'LDA')],
+        'list_A3': [('int', 'N'), ('int', 'kla'), ('int', 'kua'), (ctype, 'A', 'data'), ('int', 'LDA')],
         'list_B1': {'g': [('int', 'klb'), (ctype, 'B'), ('int', 'LDB')], 'e': ''},
         'list_B2': {'g': [('int', 'klb'), ('int', 'kub'), (ctype, 'B'), ('int', 'LDB')], 'e': ''},
     }
     dense = {
-        'list_A1': [('char', 'UPLO'), ('int', 'N'), (ctype, 'A'), ('int', 'LDA')],
-        'list_A2': [('int', 'N'), (ctype, 'A'), ('int', 'LDA')],
+        'list_A1': [('char', 'UPLO'), ('int', 'N'), (ctype, 'A', 'data'), ('int', 'LDA')],
+        'list_A2': [('int', 'N'), (ctype, 'A', 'data'), ('int', 'LDA')],
         'list_B': {'g': [(ctype, 'B'), ('int', 'LDB')], 'e': ''},
     }
     components = dict(sparse=sparse, banded=banded, dense=dense)
@@ -130,7 +130,7 @@ def get_func_name(problem):
     return f'{T}feast_{YF}{eg}v{x}_'
 
 
-def get_call_sig(problem, matrix_type, components):
+def get_call_sig(problem, matrix_type, components, sep):
     list_A = problem['list_A']
     list_B = problem['list_B']
     list_I = problem['list_I']
@@ -138,9 +138,9 @@ def get_call_sig(problem, matrix_type, components):
     eg = problem['eg']
     ctype = CTYPES[problem['T']]
     c = components[ctype][matrix_type]
-    return ''.join([c[list_A], c[list_B][eg],
-                    c['common1'], c[list_I],
-                    c['common2'], c['X'][x]])
+    args = [c[list_A], c[list_B][eg], c['common1'],
+            c[list_I], c['common2'], c['X'][x]]
+    return sep.join(x for x in args if x)
 
 
 def get_header_info():
@@ -151,7 +151,7 @@ def get_header_info():
         for problem in problems:
             p = parse_problem(problem)
             funcname = get_func_name(p)
-            call_sig = get_call_sig(p, matrix_type, components)
+            call_sig = get_call_sig(p, matrix_type, components, '')
             call = "extern void {}({})".format(funcname, call_sig)
             headers[matrix_type].append(call)
     return headers
@@ -174,10 +174,59 @@ def get_cython_info():
                 funcname=get_func_name(p),
                 pytype=pytypes[p['T']],
                 list_I_args=f'{t} {x1}, {t} {x2}',
-                call_sig=get_call_sig(p, matrix_type, components),
+                call_sig=get_call_sig(p, matrix_type, components, ','),
             ))
 
     return dict(infos)
+
+
+def create_feast_pyx():
+    t = """import numpy as np
+from copy import copy
+cimport numpy as np
+
+int_dtype = np.int32
+{% for p in problems.dense %}
+def {{ p.funcname[:-1] }}(
+    np.ndarray[{{ p.ctype }}, ndim=2] A,
+    {%- if p.eg == 'g' -%}np.ndarray[{{ p.ctype }}, ndim=2] B,{% endif %}
+    {{ p.list_I_args }},
+    list _feastparam = None,
+    {%- if "UPLO" in p.call_sig -%}char UPLO = 'F'{% endif %}
+    ):
+    if _feastparam is None:
+        _feastparam = []
+    {% if "UPLO" in p.call_sig %}
+    if isinstance(UPLO, str):
+        UPLO = UPLO.encode()
+    {% endif %}
+    DTYPE = {{ p.pytype }}
+    cdef int loop, mode, info
+    cdef {{ p.ctype }} epsout
+    cdef int N = A.shape[0]
+    cdef int LDA = A.shape[1]
+    cdef int M0 = A.shape[1]  # because M0 will change on exit
+    {% if p.eg == 'g' %}
+    cdef int LDB = B.shape[1]
+    {% endif %}
+    cdef np.ndarray lambda_ = np.zeros(LDA, dtype=DTYPE)
+    cdef np.ndarray q = np.zeros(N * LDA, dtype=DTYPE)
+    cdef np.ndarray res = np.zeros(LDA, dtype=DTYPE)
+    cdef np.ndarray feastparam = np.zeros(64, dtype=np.int32)
+    feastinit_(<int*> feastparam.data)
+    for k, v in _feastparam:
+        feastparam[k] = v
+
+    {{ p.funcname }}({{ p.call_sig }})
+    q = q.reshape((N, LDA))
+    return {'evecs': q, 'evals': lambda_, 'res': res, 'info': info, 'mode': mode, 'loop': loop}
+{% endfor %}
+"""
+    infos = get_cython_info()
+    infos = {k: [x for x in v if 'dfeast_syev_' == x['funcname']] for k, v in infos.items()}
+    file = Template(t).render(problems=infos)
+    with open('feast.pyx', 'w') as f:
+        f.write(file)
 
 
 def create_feast_pxd():
@@ -194,10 +243,11 @@ cdef extern from "feast_tools.h":
     extern void feastinit_(int *feastparam)
     """
     file = base + '\n\n'.join(headers.values()) + '\n'
-    file = file.replace(',)', ')').replace('lambda', 'lambda_')
+    file = file.replace(',)', ')')
     with open('feast.pxd', 'w') as f:
         f.write(file)
 
 
 if __name__ == '__main__':
     create_feast_pxd()
+    create_feast_pyx()
