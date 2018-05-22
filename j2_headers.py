@@ -16,8 +16,8 @@ def _get_base_components(ctype):
         'ds': {'double': 'd', 'float': 's'}[ctype]
     }
     sparse = {
-        'list_A1': [('char', 'UPLO'), ('int', 'N'), (ctype, 'sa'), ('int', 'isa'), ('int', 'jsa')],
-        'list_A2': [('int', 'N'), (ctype, 'sa'), ('int', 'isa'), ('int', 'jsa')],
+        'list_A1': [('char', 'UPLO'), ('int', 'N'), (ctype, 'sa', 'data'), ('int', 'isa', 'data'), ('int', 'jsa', 'data')],
+        'list_A2': [('int', 'N'), (ctype, 'sa', 'data'), ('int', 'isa', 'data'), ('int', 'jsa', 'data')],
         'list_B': {'g': [(ctype, 'sb'), ('int', 'isb'), ('int', 'jsb')], 'e': ''},
         }
     banded = {
@@ -186,16 +186,19 @@ from copy import copy
 cimport numpy as np
 
 int_dtype = np.int32
+
+# Dense matrices
+
 {% for p in problems.dense %}
 def {{ p.funcname[:-1] }}(
     np.ndarray[{{ p.ctype }}, ndim=2] A,
     {%- if p.eg == 'g' -%}np.ndarray[{{ p.ctype }}, ndim=2] B,{% endif %}
     {{ p.list_I_args }},
-    list _feastparam = None,
+    list fmp = None,
     {%- if "UPLO" in p.call_sig -%}char UPLO = 'F'{% endif %}
     ):
-    if _feastparam is None:
-        _feastparam = []
+    if fmp is None:
+        fmp = []
     {% if "UPLO" in p.call_sig %}
     if isinstance(UPLO, str):
         UPLO = UPLO.encode()
@@ -214,16 +217,64 @@ def {{ p.funcname[:-1] }}(
     cdef np.ndarray res = np.zeros(LDA, dtype=DTYPE)
     cdef np.ndarray feastparam = np.zeros(64, dtype=np.int32)
     feastinit_(<int*> feastparam.data)
-    for k, v in _feastparam:
+    for k, v in fmp:
         feastparam[k] = v
 
     {{ p.funcname }}({{ p.call_sig }})
     q = q.reshape((N, LDA))
     return {'evecs': q, 'evals': lambda_, 'res': res, 'info': info, 'mode': mode, 'loop': loop}
 {% endfor %}
+
+
+# Sparse matrices
+{% for p in problems.sparse %}
+def {{ p.funcname[:-1] }}(
+    A,
+    {%- if p.eg == 'g' -%}np.ndarray[{{ p.ctype }}, ndim=2] B,{% endif %}
+    {{ p.list_I_args }},
+    int k=40,
+    list fmp = None,
+    {%- if "UPLO" in p.call_sig -%}char UPLO = 'F'{% endif %}
+    ):
+    if fmp is None:
+        fmp = []
+    {% if "UPLO" in p.call_sig %}
+    if isinstance(UPLO, str):
+        UPLO = UPLO.encode()
+    {% endif %}
+    DTYPE = {{ p.pytype }}
+    cdef int loop, mode, info
+    cdef {{ p.ctype }} epsout
+    cdef int N = A.shape[0]
+    cdef int M0 = k
+    {% if p.eg == 'g' %}
+    cdef int LDB = B.shape[1]
+    {% endif %}
+    cdef np.ndarray[{{ p.ctype }}, ndim=1] sa
+    cdef np.ndarray[int, ndim=1] isa
+    cdef np.ndarray[int, ndim=1] jsa
+    sa = np.hstack([A.data.real.astype(np.float64),
+                    A.data.imag.astype(np.float64)])
+    jsa = A.indices.astype(np.int32)
+    isa = A.indptr.astype(np.int32)
+
+    cdef np.ndarray lambda_ = np.zeros(M0, dtype=DTYPE)
+    cdef np.ndarray q = np.zeros(2* N * M0, dtype=DTYPE)
+    cdef np.ndarray res = np.zeros(M0, dtype=DTYPE)
+    cdef np.ndarray feastparam = np.zeros(64, dtype=np.int32)
+    feastinit_(<int*> feastparam.data)
+    for k, v in fmp:
+        feastparam[k] = v
+
+    {{ p.funcname }}({{ p.call_sig }})
+    q_real = q[:N]
+    q_imag = q[N:]
+    q = (q_real + 1j * q_imag).reshape((N, M0))
+    return {'evecs': q, 'evals': lambda_, 'res': res, 'info': info, 'mode': mode, 'loop': loop}
+{% endfor %}
 """
     infos = get_cython_info()
-    infos = {k: [x for x in v if 'dfeast_syev_' == x['funcname']] for k, v in infos.items()}
+    infos = {k: [x for x in v if x['funcname'] in ['dfeast_syev_', 'zfeast_hcsrev_']] for k, v in infos.items()}
     file = Template(t).render(problems=infos)
     with open('feast.pyx', 'w') as f:
         f.write(file)
