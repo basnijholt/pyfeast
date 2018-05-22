@@ -2,6 +2,8 @@ from collections import defaultdict
 from jinja2 import Template
 
 
+CTYPES = {'s': 'float', 'c': 'float', 'd': 'double', 'z': 'double'}
+
 def _get_base_components(ctype):
     common = {
         'common1': [('int', 'feastparam', 'data'), (ctype, 'epsout'), ('int', 'loop')],
@@ -115,21 +117,41 @@ def get_cython_components():
     return {k: _get_cython_components(k) for k in ['float', 'double']}
 
 
+def parse_problem(problem):
+    keys = 'T', 'eg', 'x', 'YF', 'list_A', 'list_B', 'list_I'
+    return dict(zip(keys, problem))
+
+
+def get_func_name(problem):
+    T = problem['T']
+    YF = problem['YF']
+    eg = problem['eg']
+    x = problem['x']
+    return f'{T}feast_{YF}{eg}v{x}_'
+
+
+def get_call_sig(problem, matrix_type, components):
+    list_A = problem['list_A']
+    list_B = problem['list_B']
+    list_I = problem['list_I']
+    x = problem['x']
+    eg = problem['eg']
+    ctype = CTYPES[problem['T']]
+    c = components[ctype][matrix_type]
+    return ''.join([c[list_A], c[list_B][eg],
+                    c['common1'], c[list_I],
+                    c['common2'], c['X'][x]])
+
+
 def get_header_info():
     all_problems = get_problems()
     headers = defaultdict(list)
     components = get_header_components()
-    ctypes = {'s': 'float', 'c': 'float', 'd': 'double', 'z': 'double'}
     for matrix_type, problems in all_problems.items():
-        for T, eg, x, YF, list_A, list_B, list_I in problems:
-            ctype = ctypes[T]
-            ctype = ctype            
-            funcname = f'{T}feast_{YF}{eg}v{x}_'
-            c = components[ctype][matrix_type]
-
-            call_sig = ''.join([c[list_A], c[list_B][eg],
-                                        c['common1'], c[list_I],
-                                        c['common2'], c['X'][x]])
+        for problem in problems:
+            p = parse_problem(problem)
+            funcname = get_func_name(p)
+            call_sig = get_call_sig(p, matrix_type, components)
             call = "extern void {}({})".format(funcname, call_sig)
             headers[matrix_type].append(call)
     return headers
@@ -140,23 +162,20 @@ def get_cython_info():
     infos = defaultdict(list)
     components = get_cython_components()
     base_components = get_base_components()
-    ctypes = {'s': 'float', 'c': 'float', 'd': 'double', 'z': 'double'}
     pytypes = {'s': 'np.float32', 'c': 'np.complex64',
                'd': 'np.float64', 'z': 'np.complex128'}
     for matrix_type, problems in all_problems.items():
-        for T, eg, x, YF, list_A, list_B, list_I in problems:
-            info = {}
-            ctype = ctypes[T]
-            info['ctype'] = ctype            
-            info['funcname'] = f'{T}feast_{YF}{eg}v{x}_'
-            c = components[ctype][matrix_type]
-            info['pytype'] = pytypes[T]
-            (t, x1), (t, x2) = base_components[ctype][matrix_type][list_I]
-            info['list_I_args'] = f'{t} {x1}, {t} {x2}'
-            info['call_sig'] = ''.join([c[list_A], c[list_B][eg],
-                                        c['common1'], c[list_I],
-                                        c['common2'], c['X'][x]])
-            infos[matrix_type].append(info)
+        for problem in problems:
+            p = parse_problem(problem)
+            ctype = CTYPES[p['T']]
+            (t, x1), (t, x2) = base_components[ctype][matrix_type][p['list_I']]
+            infos[matrix_type].append(dict(
+                ctype=ctype,
+                funcname=get_func_name(p),
+                pytype=pytypes[p['T']],
+                list_I_args=f'{t} {x1}, {t} {x2}',
+                call_sig=get_call_sig(p, matrix_type, components),
+            ))
 
     return dict(infos)
 
