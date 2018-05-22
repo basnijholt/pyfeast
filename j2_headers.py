@@ -39,50 +39,6 @@ def get_base_components():
     return {k: _get_base_components(k) for k in ['float', 'double']}
 
 
-def convert_base_components(sub_components, make_str_func):
-    from copy import deepcopy
-    header_components = deepcopy(sub_components)
-    for k, v in sub_components.items():
-        if isinstance(v, list):
-            header_components[k] = make_str_func(v)
-        elif isinstance(v, dict):
-            for _k, _v in v.items():
-                if isinstance(_v, list):
-                    header_components[k][_k] = make_str_func(_v)
-    return header_components
-
-
-def get_header_components():
-    components = {}
-    base_components = get_base_components()
-    for ctype in ['float', 'double']:
-        make_str = lambda v: ','.join([f'{ctype} *{name}' for ctype, name, *_ in v]) + ','
-        components[ctype] = {k: convert_base_components(v, make_str)
-                             for k, v in base_components[ctype].items()}
-    return components
-
-
-
-def _get_call_signatures(ctype):
-    def make_str(v):
-        s = []
-        for tup in v:
-            if len(tup) == 2:
-                ctype, name = tup
-                s.append(f'<{ctype}*> &{name}')
-            else:
-                ctype, name, size = tup
-                s.append(f'<{ctype}*> {name}.data')
-        return ', '.join(s)
-    components = get_base_components()
-    return {k: convert_base_components(v, make_str)
-            for k, v in components[ctype].items()}
-
-
-def get_call_signatures():
-    return {k: _get_call_signatures(k) for k in ['float', 'double']}
-
-
 def get_problems():
     from itertools import product
     # Table as defined on page 20 of the documentation
@@ -116,12 +72,73 @@ def get_problems():
     return dict(all_problems)
 
 
-def get_template_info(which):
+def convert_base_components(sub_components, make_str_func):
+    from copy import deepcopy
+    header_components = deepcopy(sub_components)
+    for k, v in sub_components.items():
+        if isinstance(v, list):
+            header_components[k] = make_str_func(v)
+        elif isinstance(v, dict):
+            for _k, _v in v.items():
+                if isinstance(_v, list):
+                    header_components[k][_k] = make_str_func(_v)
+    return header_components
+
+
+def get_header_components():
+    components = {}
+    base_components = get_base_components()
+    for ctype in ['float', 'double']:
+        make_str = lambda v: ','.join([f'{ctype} *{name}' for ctype, name, *_ in v]) + ','
+        components[ctype] = {k: convert_base_components(v, make_str)
+                             for k, v in base_components[ctype].items()}
+    return components
+
+
+def _get_cython_components(ctype):
+    def make_str(v):
+        s = []
+        for tup in v:
+            if len(tup) == 2:
+                ctype, name = tup
+                s.append(f'<{ctype}*> &{name}')
+            else:
+                ctype, name, size = tup
+                s.append(f'<{ctype}*> {name}.data')
+        return ', '.join(s)
+    components = get_base_components()
+    return {k: convert_base_components(v, make_str)
+            for k, v in components[ctype].items()}
+
+
+def get_cython_components():
+    return {k: _get_cython_components(k) for k in ['float', 'double']}
+
+
+def get_header_info():
+    all_problems = get_problems()
+    headers = defaultdict(list)
+    components = get_header_components()
+    ctypes = {'s': 'float', 'c': 'float', 'd': 'double', 'z': 'double'}
+    for matrix_type, problems in all_problems.items():
+        for T, eg, x, YF, list_A, list_B, list_I in problems:
+            ctype = ctypes[T]
+            ctype = ctype            
+            funcname = f'{T}feast_{YF}{eg}v{x}_'
+            c = components[ctype][matrix_type]
+
+            call_sig = ''.join([c[list_A], c[list_B][eg],
+                                        c['common1'], c[list_I],
+                                        c['common2'], c['X'][x]])
+            call = "extern void {}({})".format(funcname, call_sig)
+            headers[matrix_type].append(call)
+    return headers
+
+
+def get_cython_info():
     all_problems = get_problems()
     infos = defaultdict(list)
-    headers = defaultdict(list)
-    header_components = get_header_components()
-    call_signatures = get_call_signatures()
+    components = get_cython_components()
     base_components = get_base_components()
     ctypes = {'s': 'float', 'c': 'float', 'd': 'double', 'z': 'double'}
     pytypes = {'s': 'np.float32', 'c': 'np.complex64',
@@ -132,24 +149,16 @@ def get_template_info(which):
             ctype = ctypes[T]
             info['ctype'] = ctype            
             info['funcname'] = f'{T}feast_{YF}{eg}v{x}_'
-            if which == 'headers':
-                c = header_components[ctype][matrix_type]
-            else:
-                c = call_signatures[ctype][matrix_type]
-                info['pytype'] = pytypes[T]
-                (t, x1), (t, x2) = base_components[ctype][matrix_type][list_I]
-                info['list_I_args'] = f'{t} {x1}, {t} {x2}'
+            c = components[ctype][matrix_type]
+            info['pytype'] = pytypes[T]
+            (t, x1), (t, x2) = base_components[ctype][matrix_type][list_I]
+            info['list_I_args'] = f'{t} {x1}, {t} {x2}'
             info['call_sig'] = ''.join([c[list_A], c[list_B][eg],
                                         c['common1'], c[list_I],
                                         c['common2'], c['X'][x]])
-            headers[matrix_type].append("extern void {}({})".format(
-                info['funcname'], info['call_sig']))
             infos[matrix_type].append(info)
 
-    if which == 'headers':
-        return headers
-    else:
-        return dict(infos)
+    return dict(infos)
 
 
 def create_feast_pxd():
@@ -157,7 +166,7 @@ def create_feast_pxd():
 cdef extern from "feast_{}.h":
     {}
     """
-    header_info = get_template_info('headers')
+    header_info = get_header_info()
     headers = {k: '\n    '.join(v) for k, v in header_info.items()}
     headers = {k: template.format(k, v) for k, v in headers.items()}
 
