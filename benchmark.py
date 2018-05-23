@@ -12,6 +12,8 @@ import kwant.linalg.mumps as mumps
 import time
 import argparse
 
+import feast
+
 # ****************** general constants and globals *******************
 c = physical_constants['speed of light in vacuum'][0]
 val_hbar = physical_constants['Planck constant over 2 pi in eV s'][0]
@@ -103,32 +105,45 @@ parser = argparse.ArgumentParser()
 parser.add_argument("--latc", type=float, default=0.1)
 args = parser.parse_args()
 
+results = []
+for a in [0.1, 0.3, 1, 3, 10]:
+    print(f'Starting with a={a}.')
+    syst = make_syst(a, width=100)
 
-syst = make_syst(args.latc, width=100)
+    t_start = time.time()
+    H = Hk(syst, k_z=0.1)
+    construction_time = time.time() - t_start
 
-print('Construction time: ', end='')
-t_start = time.time()
-H = Hk(syst, k_z=0.1)
-print(time.time() - t_start)
+    hamiltonian_size = H.shape[0]
 
-print('Hamiltonian size: ', H.shape[0])
+    nonzero_elements = H.nnz
 
-print('Nonzero elements: ', H.nnz)
+    t_start = time.time()
+    E, V = eigsh(H, sigma=0, k=8, tol=1e-6)
+    eigsh_time = time.time() - t_start
 
-print('Diagonalization time with mumps: ', end='')
-t_start = time.time()
-E, V = eigsh(H, sigma=0, k=8, tol=1e-6)
-print(time.time() - t_start)
+    t_start = time.time()
+    E, V = sla.eigsh(H, sigma=0, k=8, tol=1e-6)
+    mumps_time = time.time() - t_start
 
-print('Diagonalization time without mumps: ', end='')
-t_start = time.time()
-E, V = sla.eigsh(H, sigma=0, k=8, tol=1e-6)
-print(time.time() - t_start)
+    E_max = np.max(E) + 1e-10
 
-E_max = np.max(E) + 1e-10
+    t_start = time.time()
+    x = feast.zfeast_hcsrev(H, Emin=-E_max, Emax=E_max, k=10)
+    feast_time = time.time() - t_start
 
-print('Diagonalization time with FEAST: ', end='')
-import feast
-t_start = time.time()
-x = feast.zfeast_hcsrev(H, Emin=-E_max, Emax=E_max, k=10)
-print(time.time() - t_start)
+    results.append(dict(a=a,
+                        construction_time=construction_time,
+                        hamiltonian_size=hamiltonian_size,
+                        nonzero_elements=nonzero_elements,
+                        eigsh_time=eigsh_time,
+                        mumps_time=mumps_time,
+                        feast_time=feast_time))
+
+with open('benchmark_results.pickle', 'wb') as f:
+    import pickle
+    pickle.dump(results, f)
+
+# with open('benchmark_results.pickle', 'rb') as f:
+#     import pickle
+#     results = pickle.load(f)
