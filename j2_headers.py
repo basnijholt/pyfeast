@@ -162,8 +162,8 @@ def get_cython_info():
     infos = defaultdict(list)
     components = get_cython_components()
     base_components = get_base_components()
-    pytypes = {'s': 'np.float32', 'c': 'np.complex64',
-               'd': 'np.float64', 'z': 'np.complex128'}
+    pytypes = {'s': 'np.float32', 'c': 'np.float64',
+               'd': 'np.float64', 'z': 'np.float64'}
     for matrix_type, problems in all_problems.items():
         for problem in problems:
             p = parse_problem(problem)
@@ -184,6 +184,7 @@ def create_feast_pyx():
     t = """import numpy as np
 from copy import copy
 cimport numpy as np
+from scipy.sparse import csr_matrix
 
 int_dtype = np.int32
 
@@ -234,32 +235,35 @@ def {{ p.funcname[:-1] }}(
     {{ p.list_I_args }},
     int k=40,
     list fmp = None,
-    {%- if "UPLO" in p.call_sig -%}char UPLO = 'F'{% endif %}
+{%- if "UPLO" in p.call_sig -%}char UPLO = 'F'{% endif %}
     ):
     if fmp is None:
         fmp = []
-    {% if "UPLO" in p.call_sig %}
+{% if "UPLO" in p.call_sig %}
     if isinstance(UPLO, str):
         UPLO = UPLO.encode()
-    {% endif %}
+{% endif %}
+    if not isinstance(A, csr_matrix):
+        A = csr_matrix(A)
+
     DTYPE = {{ p.pytype }}
     cdef int loop, mode, info
     cdef {{ p.ctype }} epsout
     cdef int N = A.shape[0]
     cdef int M0 = k
-    {% if p.eg == 'g' %}
+{% if p.eg == 'g' %}
     cdef int LDB = B.shape[1]
-    {% endif %}
+{% endif %}
     cdef np.ndarray[{{ p.ctype }}, ndim=1] sa
     cdef np.ndarray[int, ndim=1] isa
     cdef np.ndarray[int, ndim=1] jsa
-    sa = np.hstack([A.data.real.astype(np.float64),
-                    A.data.imag.astype(np.float64)])
-    jsa = A.indices.astype(np.int32)
-    isa = A.indptr.astype(np.int32)
+    sa = np.hstack([A.data.real,
+                    A.data.imag]).astype(DTYPE)
+    jsa = A.indices.astype(np.int32) + 1
+    isa = A.indptr.astype(np.int32) + 1
 
     cdef np.ndarray lambda_ = np.zeros(M0, dtype=DTYPE)
-    cdef np.ndarray q = np.zeros(2* N * M0, dtype=DTYPE)
+    cdef np.ndarray q = np.zeros(2 * N * M0, dtype=DTYPE)
     cdef np.ndarray res = np.zeros(M0, dtype=DTYPE)
     cdef np.ndarray feastparam = np.zeros(64, dtype=np.int32)
     feastinit_(<int*> feastparam.data)
@@ -267,9 +271,9 @@ def {{ p.funcname[:-1] }}(
         feastparam[k] = v
 
     {{ p.funcname }}({{ p.call_sig }})
-    q_real = q[:N]
-    q_imag = q[N:]
-    q = (q_real + 1j * q_imag).reshape((N, M0))
+    q_real = q[:N*k]
+    q_imag = q[N*k:]
+    q = (q_real + 1j * q_imag).reshape((N, -1))
     return {'evecs': q, 'evals': lambda_, 'res': res, 'info': info, 'mode': mode, 'loop': loop}
 {% endfor %}
 """

@@ -17,7 +17,7 @@ def guess_libraries():
 
     This is known to work with the FEAST binaries in the conda-forge channel."""
     import ctypes.util
-    common_libs = ["feast_dense", "feast_sparse", "feast_banded", "feast", 'mkl_rt', "gfortran", 'iomp5']
+    common_libs = ['feast_dense', 'feast_sparse', 'feast_banded', 'feast', 'mkl_rt', 'gfortran', 'iomp5']
     for lib in ['blas', 'openblas']:
         if ctypes.util.find_library(lib):
             return common_libs + [lib]
