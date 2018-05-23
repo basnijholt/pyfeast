@@ -8,7 +8,7 @@ from distutils.core import setup
 from distutils.extension import Extension
 from Cython.Build import cythonize
 
-from j2_headers import create_feast_pxd, create_feast_pyx
+from create_cython_files import create_feast_pxd, create_feast_pyx
 
 
 def guess_libraries():
