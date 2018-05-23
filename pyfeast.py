@@ -12,7 +12,6 @@ x = feast.dfeast_syev(A, Emin, Emax)
 print(x)
 
 
-
 import scipy.sparse.linalg
 with open('system2') as f:
     mat = f.readlines()
@@ -28,6 +27,6 @@ for l in mat[1:]:
 
 csr_mat = scipy.sparse.csr.csr_matrix((data, (rows, cols)))
 
-x = feast.zfeast_hcsrev(csr_mat, Emin=-0.35, Emax=0.23)
+x = feast.zfeast_hcsrev(csr_mat, fpm=[(1,1)], Emin=-0.35, Emax=0.23)
 
 print(x)

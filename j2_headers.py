@@ -195,11 +195,11 @@ def {{ p.funcname[:-1] }}(
     np.ndarray[{{ p.ctype }}, ndim=2] A,
     {%- if p.eg == 'g' -%}np.ndarray[{{ p.ctype }}, ndim=2] B,{% endif %}
     {{ p.list_I_args }},
-    list fmp = None,
+    list fpm = None,
     {%- if "UPLO" in p.call_sig -%}char UPLO = 'F'{% endif %}
     ):
-    if fmp is None:
-        fmp = []
+    if fpm is None:
+        fpm = []
     {% if "UPLO" in p.call_sig %}
     if isinstance(UPLO, str):
         UPLO = UPLO.encode()
@@ -218,7 +218,7 @@ def {{ p.funcname[:-1] }}(
     cdef np.ndarray res = np.zeros(LDA, dtype=DTYPE)
     cdef np.ndarray feastparam = np.zeros(64, dtype=np.int32)
     feastinit_(<int*> feastparam.data)
-    for k, v in fmp:
+    for k, v in fpm:
         feastparam[k] = v
 
     {{ p.funcname }}({{ p.call_sig }})
@@ -234,11 +234,11 @@ def {{ p.funcname[:-1] }}(
     {%- if p.eg == 'g' -%}np.ndarray[{{ p.ctype }}, ndim=2] B,{% endif %}
     {{ p.list_I_args }},
     int k=40,
-    list fmp = None,
+    list fpm = None,
 {%- if "UPLO" in p.call_sig -%}char UPLO = 'F'{% endif %}
     ):
-    if fmp is None:
-        fmp = []
+    if fpm is None:
+        fpm = []
 {% if "UPLO" in p.call_sig %}
     if isinstance(UPLO, str):
         UPLO = UPLO.encode()
@@ -267,8 +267,8 @@ def {{ p.funcname[:-1] }}(
     cdef np.ndarray res = np.zeros(M0, dtype=DTYPE)
     cdef np.ndarray feastparam = np.zeros(64, dtype=np.int32)
     feastinit_(<int*> feastparam.data)
-    for k, v in fmp:
-        feastparam[k] = v
+    for key, val in fpm:
+        feastparam[key] = val
 
     {{ p.funcname }}({{ p.call_sig }})
     q_real = q[:N*k]
