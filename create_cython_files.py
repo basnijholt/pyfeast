@@ -253,11 +253,11 @@ def {{ p.funcname[:-1] }}(
 {% if p.eg == 'g' %}
     cdef int LDB = B.shape[1]
 {% endif %}
-    cdef np.ndarray[{{ p.ctype }}, ndim=1] sa
+    cdef np.ndarray sa = np.zeros(2 * A.data.shape[0], dtype=DTYPE)
     cdef np.ndarray[int, ndim=1] isa
     cdef np.ndarray[int, ndim=1] jsa
-    sa = np.hstack([A.data.real,
-                    A.data.imag]).astype(DTYPE)
+    sa[::2] = A.data.real
+    sa[1::2] = A.data.imag
     jsa = A.indices.astype(np.int32) + 1  # +1 bc FORTRAN
     isa = A.indptr.astype(np.int32) + 1
 
