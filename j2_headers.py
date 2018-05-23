@@ -189,7 +189,6 @@ from scipy.sparse import csr_matrix
 int_dtype = np.int32
 
 # Dense matrices
-
 {% for p in problems.dense %}
 def {{ p.funcname[:-1] }}(
     np.ndarray[{{ p.ctype }}, ndim=2] A,
@@ -259,7 +258,7 @@ def {{ p.funcname[:-1] }}(
     cdef np.ndarray[int, ndim=1] jsa
     sa = np.hstack([A.data.real,
                     A.data.imag]).astype(DTYPE)
-    jsa = A.indices.astype(np.int32) + 1
+    jsa = A.indices.astype(np.int32) + 1  # +1 bc FORTRAN
     isa = A.indptr.astype(np.int32) + 1
 
     cdef np.ndarray lambda_ = np.zeros(M0, dtype=DTYPE)
