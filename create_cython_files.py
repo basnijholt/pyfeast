@@ -277,7 +277,12 @@ def {{ p.funcname[:-1] }}(
 {% endfor %}
 """
     infos = get_cython_info()
-    infos = {k: [x for x in v if x['funcname'] in ['dfeast_syev_', 'zfeast_hcsrev_']] for k, v in infos.items()}
+
+    # XXX: temporarily only write the following to the file!
+    selected = ['dfeast_syev_', 'zfeast_hcsrev_']
+    infos = {k: [x for x in v if x['funcname'] in selected]
+             for k, v in infos.items()}
+
     file = Template(t).render(problems=infos)
     with open('feast.pyx', 'w') as f:
         f.write(file)
