@@ -1,3 +1,5 @@
+#!/usr/bin/env python3
+
 import sympy
 import numpy as np
 from scipy.constants import physical_constants
