@@ -8,9 +8,8 @@ from distutils.core import setup
 from distutils.extension import Extension
 from Cython.Build import cythonize
 
-import jinja2 as j2
+from j2_headers import create_feast_pxd, create_feast_pyx
 
-from j2_headers import create_feast_pxd
 
 def guess_libraries():
     """Return the configuration for FEAST if it is available in a known way.
@@ -73,6 +72,7 @@ def get_config(config_file='build.conf'):
 if __name__ == '__main__':
     ext_params = get_config()
     create_feast_pxd()
+    create_feast_pyx()
 
     ext_modules=[
         Extension("feast",

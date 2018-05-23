@@ -3,6 +3,7 @@ feast.pxd
 feast.pyx
 *.c
 Untitled.ipynb
+cython_debug/
 
 
 # Byte-compiled / optimized / DLL files
