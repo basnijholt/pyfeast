@@ -83,5 +83,5 @@ if __name__ == '__main__':
 
     setup(
       name="pyfeast",
-      ext_modules=cythonize(ext_modules, gdb_debug=True),
+      ext_modules=cythonize(ext_modules),
     )
