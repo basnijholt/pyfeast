@@ -3,8 +3,7 @@
 # Install
 Install the following dependencies with
 ```
-conda install --yes -c basnijholt feast
-conda install --yes -c defaults mkl
+conda install --yes -c defaults mkl mkl-devel
 ```
 
 ## Run

@@ -127,7 +127,7 @@ def get_func_name(problem):
     YF = problem['YF']
     eg = problem['eg']
     x = problem['x']
-    return f'{T}feast_{YF}{eg}v{x}_'
+    return f'{T}feast_{YF}{eg}v{x}'
 
 
 def get_call_sig(problem, matrix_type, components, sep):
@@ -190,7 +190,7 @@ int_dtype = np.int32
 
 # Dense matrices
 {% for p in problems.dense %}
-def {{ p.funcname[:-1] }}(
+def {{ p.funcname }}_py(
     np.ndarray[{{ p.ctype }}, ndim=2] A,
     {%- if p.eg == 'g' -%}np.ndarray[{{ p.ctype }}, ndim=2] B,{% endif %}
     {{ p.list_I_args }},
@@ -216,7 +216,7 @@ def {{ p.funcname[:-1] }}(
     cdef np.ndarray q = np.zeros(N * LDA, dtype=DTYPE)
     cdef np.ndarray res = np.zeros(LDA, dtype=DTYPE)
     cdef np.ndarray feastparam = np.zeros(64, dtype=np.int32)
-    feastinit_(<int*> feastparam.data)
+    feastinit(<int*> feastparam.data)
     for k, v in fpm:
         feastparam[k] = v
 
@@ -228,7 +228,7 @@ def {{ p.funcname[:-1] }}(
 
 # Sparse matrices
 {% for p in problems.sparse %}
-def {{ p.funcname[:-1] }}(
+def {{ p.funcname }}_py(
     A,
     {%- if p.eg == 'g' -%}np.ndarray[{{ p.ctype }}, ndim=2] B,{% endif %}
     {{ p.list_I_args }},
@@ -265,7 +265,7 @@ def {{ p.funcname[:-1] }}(
     cdef np.ndarray q = np.zeros(2 * N * M0, dtype=DTYPE)
     cdef np.ndarray res = np.zeros(M0, dtype=DTYPE)
     cdef np.ndarray feastparam = np.zeros(64, dtype=np.int32)
-    feastinit_(<int*> feastparam.data)
+    feastinit(<int*> feastparam.data)
     for key, val in fpm:
         feastparam[key] = val
 
@@ -279,7 +279,7 @@ def {{ p.funcname[:-1] }}(
     infos = get_cython_info()
 
     # XXX: temporarily only write the following to the file!
-    selected = ['dfeast_syev_', 'zfeast_hcsrev_']
+    selected = ['dfeast_syev']
     infos = {k: [x for x in v if x['funcname'] in selected]
              for k, v in infos.items()}
 
@@ -290,16 +290,16 @@ def {{ p.funcname[:-1] }}(
 
 def create_feast_pxd():
     template = """
-cdef extern from "feast_{}.h":
+cdef extern from "mkl.h":
     {}
     """
     header_info = get_header_info()
     headers = {k: '\n    '.join(v) for k, v in header_info.items()}
-    headers = {k: template.format(k, v) for k, v in headers.items()}
+    headers = {k: template.format(v) for k, v in headers.items()}
 
     base = """
-cdef extern from "feast_tools.h":
-    extern void feastinit_(int *feastparam)
+cdef extern from "mkl.h":
+    extern void feastinit(int *feastparam)
     """
     file = base + '\n\n'.join(headers.values()) + '\n'
     file = file.replace(',)', ')')

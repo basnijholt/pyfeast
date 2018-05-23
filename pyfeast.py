@@ -7,7 +7,7 @@ A = np.array([[2.0, -1.0], [-1.0, 2.0]])
 Emin = -5.0
 Emax = 5.0
 
-x = feast.dfeast_syev(A, Emin, Emax)
+x = feast.dfeast_syev_py(A, Emin, Emax)
 
 print(x)
 
@@ -27,6 +27,6 @@ for l in mat[1:]:
 
 csr_mat = csr_matrix((data, (rows, cols)))
 
-x = feast.zfeast_hcsrev(csr_mat, fpm=[(0,1)], Emin=-0.35, Emax=0.23)
+x = feast.zfeast_hcsrev_py(csr_mat, fpm=[(0,1)], Emin=-0.35, Emax=0.23)
 
 print(x)
